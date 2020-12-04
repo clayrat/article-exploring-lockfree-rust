@@ -20,7 +20,7 @@ impl Behavior for (u64, u64) {
     }
 }
 
-fn transform_to_opaque(s: String) -> Option<Arc<Behavior>> {
+fn transform_to_opaque(s: String) -> Option<Arc<dyn Behavior>> {
     let nums: Vec<_> = s.split_whitespace().collect();
     if nums.len() != 2 {
         return None;

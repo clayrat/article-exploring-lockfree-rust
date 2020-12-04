@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Hrvoje Niksic <hniksic@gmail.com>"]
 
 [dependencies]
-coco = "0.2.1"
-crossbeam = "0.3.0"
-time = "0.1"
-rand = "0.3"
+crossbeam = "0.8.0"
+time = "0.2.23"
+rand = "0.7.3"

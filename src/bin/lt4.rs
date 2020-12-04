@@ -90,7 +90,7 @@ fn main() {
             move || {
                 let t0 = ::std::time::Instant::now();
                 for _ in 0..ITERS {
-                    assert!(lt.get_transformed().map(|x| x) == Some(124));
+                    assert!(lt.get_transformed() == Some(124));
                 }
                 let t1 = ::std::time::Instant::now();
                 println!("Consumer-{}: {}", i, to_ns(t1 - t0, ITERS));

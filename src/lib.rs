@@ -1,4 +1,4 @@
-extern crate coco;
+extern crate crossbeam;
 
 pub mod lazy_transform;
 

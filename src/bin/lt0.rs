@@ -2,12 +2,12 @@ use std::sync::Mutex;
 
 struct LazyState<T, S> {
     source: Option<S>,
-    value: Option<T>,
+    value: Option<T>
 }
 
 pub struct LazyTransform<T, S, FN> {
     transform_fn: FN,
-    state: Mutex<LazyState<T, S>>,
+    state: Mutex<LazyState<T, S>>
 }
 
 impl<T: Clone, S, FN: Fn(S) -> Option<T>> LazyTransform<T, S, FN> {

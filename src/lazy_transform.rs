@@ -1,11 +1,12 @@
+use std::mem::ManuallyDrop;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use coco::epoch::{self, Atomic, Owned, Ptr, Scope};
+use crossbeam::epoch::{self, Atomic, Guard, Shared, Owned};
 
 #[derive(Debug)]
 pub struct LazyTransform<T, S, FN> {
     transform_fn: FN,
-    source: Atomic<S>,
+    source: Atomic<ManuallyDrop<S>>,
     value: Atomic<T>,
     transform_lock: LightLock,
 }
@@ -22,38 +23,40 @@ impl<T: Clone, S, FN: Fn(S) -> Option<T>> LazyTransform<T, S, FN> {
 
     // Publish a new source.
     pub fn set_source(&self, source: S) {
-        epoch::pin(|scope| unsafe {
-            let source_ptr = Owned::new(source).into_ptr(&scope);
-            let prev = self.source.swap(source_ptr, Ordering::AcqRel, &scope);
-            if !prev.is_null() {
-                scope.defer_drop(prev);
-            }
-        });
+        let guard = epoch::pin();
+        let source_ptr = Owned::new(ManuallyDrop::new(source));
+        let prev = self.source.swap(source_ptr, Ordering::AcqRel, &guard);
+        if !prev.is_null() {
+            unsafe { guard.defer_destroy(prev); }
+        }
     }
 
     // Transform and drop the newly published SOURCE if available.  Caches the
     // new value and returns a copy.  Returns None if no new source exists, if
     // the lock is already taken, or if transformation fails.
-    fn try_transform(&self, scope: &Scope) -> Option<T> {
+    fn try_transform(&self, guard: &Guard) -> Option<T> {
         if let Some(_lock_guard) = self.transform_lock.try_lock() {
-            let source = self.source.swap(Ptr::null(), Ordering::AcqRel, &scope);
+            let source = self.source.swap(Shared::null(), Ordering::AcqRel, &guard);
             if source.is_null() {
                 return None;
             }
             let source_data;
             unsafe {
-                source_data = ::std::ptr::read(source.as_raw());
-                scope.defer_free(source);
+                guard.defer_destroy(source);
+                source_data = ManuallyDrop::into_inner(std::ptr::read(source.as_raw()));
             }
             let newval = match (self.transform_fn)(source_data) {
                 Some(newval) => newval,
                 None => return None,
             };
-            let prev = self.value.swap(Owned::new(newval.clone()).into_ptr(&scope),
-                                       Ordering::AcqRel, &scope);
+            let prev = self.value.swap(
+                Owned::new(newval.clone()),
+                Ordering::AcqRel,
+                &guard,
+            );
             unsafe {
                 if !prev.is_null() {
-                    scope.defer_drop(prev);
+                    guard.defer_destroy(prev);
                 }
             }
             return Some(newval);
@@ -64,19 +67,20 @@ impl<T: Clone, S, FN: Fn(S) -> Option<T>> LazyTransform<T, S, FN> {
     // Lazily generate a new value if a new source is provided.  Otherwise,
     // return the cached value.
     pub fn get_transformed(&self) -> Option<T> {
-        epoch::pin(|scope| {
-            let source = self.source.load(Ordering::Relaxed, &scope);
-            if !source.is_null() {
-                let newval = self.try_transform(&scope);
-                if newval.is_some() {
-                    return newval;
-                }
+        let guard = epoch::pin();
+        let source = self.source.load(Ordering::Relaxed, &guard);
+        if !source.is_null() {
+            let newval = self.try_transform(&guard);
+            if newval.is_some() {
+                return newval;
             }
-            unsafe {
-                self.value.load(Ordering::Acquire, &scope)
-                    .as_ref().map(T::clone)
-            }
-        })
+        }
+        unsafe {
+            self.value
+                .load(Ordering::Acquire, &guard)
+                .as_ref()
+                .map(T::clone)
+        }
     }
 }
 

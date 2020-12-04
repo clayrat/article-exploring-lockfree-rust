@@ -1,3 +1,4 @@
+/*
 extern crate crossbeam;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -97,7 +98,11 @@ impl<'a> Drop for LightGuard<'a> {
     }
 }
 
+*/
+
 fn main() {
+
+    /*
     use std::sync::Arc;
 
     fn to_ns(x: ::std::time::Duration, iters: usize) -> f64 {
@@ -127,4 +132,5 @@ fn main() {
     for t in threads {
         t.join().unwrap();
     }
+    */
 }
